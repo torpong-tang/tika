@@ -5,6 +5,9 @@ const nextConfig = {
       bodySizeLimit: "5mb",
     },
   },
+  basePath: "/tika",
+  assetPrefix: "/tika",
+  output: "standalone",
 };
 
 module.exports = nextConfig;

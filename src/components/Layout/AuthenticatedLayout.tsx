@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import AppLayout from "./AppLayout";
 
 export default function AuthenticatedLayout({
@@ -9,11 +10,24 @@ export default function AuthenticatedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { loading } = useAuth();
+  const { user, loading } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+  const isLoginPage = pathname === "/login" || pathname.endsWith("/login");
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user && !isLoginPage) {
+      router.replace("/login");
+      return;
+    }
+    if (user && isLoginPage) {
+      router.replace("/");
+    }
+  }, [loading, user, isLoginPage, router]);
 
   // Show nothing while checking auth
-  if (loading) {
+  if (loading || (!user && !isLoginPage)) {
     return (
       <div className="min-h-screen bg-navy-950 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-500"></div>
@@ -22,7 +36,7 @@ export default function AuthenticatedLayout({
   }
 
   // Login page — no AppLayout wrapper
-  if (pathname === "/login") {
+  if (isLoginPage) {
     return <>{children}</>;
   }
 

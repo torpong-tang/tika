@@ -4,6 +4,7 @@ import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthenticatedLayout from "@/components/Layout/AuthenticatedLayout";
+import ApiBasePathPatch from "@/components/ApiBasePathPatch";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <ApiBasePathPatch />
         <AuthProvider>
           <LanguageProvider>
             <AuthenticatedLayout>{children}</AuthenticatedLayout>
