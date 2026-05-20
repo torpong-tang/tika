@@ -1,9 +1,11 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import AppLayout from "./AppLayout";
+
+const BASE_PATH = "/tika";
 
 export default function AuthenticatedLayout({
   children,
@@ -12,19 +14,18 @@ export default function AuthenticatedLayout({
 }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
   const isLoginPage = pathname === "/login" || pathname.endsWith("/login");
 
   useEffect(() => {
     if (loading) return;
     if (!user && !isLoginPage) {
-      router.replace("/login");
+      window.location.replace(`${BASE_PATH}/login`);
       return;
     }
     if (user && isLoginPage) {
-      router.replace("/");
+      window.location.replace(BASE_PATH);
     }
-  }, [loading, user, isLoginPage, router]);
+  }, [loading, user, isLoginPage]);
 
   // Show nothing while checking auth
   if (loading || (!user && !isLoginPage)) {

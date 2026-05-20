@@ -24,13 +24,15 @@ const AuthContext = createContext<AuthContextType>({
   refreshUser: async () => {},
 });
 
+const BASE_PATH = "/tika";
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me");
+      const res = await fetch(`${BASE_PATH}/api/auth/me`);
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
@@ -49,9 +51,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch(`${BASE_PATH}/api/auth/logout`, { method: "POST" });
     setUser(null);
-    window.location.href = "/tika/login";
+    window.location.href = `${BASE_PATH}/login`;
   };
 
   return (
