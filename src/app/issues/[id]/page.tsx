@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLanguage } from "@/context/LanguageContext";
-import { Issue, Comment, IssueStatus } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { Issue, Comment, IssueStatus, IssueActivity, IssueAttachment } from "@/types";
 import {
   ArrowLeft,
   Bug,
@@ -17,6 +18,9 @@ import {
   Send,
   Trash2,
   Clock,
+  History,
+  Paperclip,
+  Upload,
 } from "lucide-react";
 
 const statusColors: Record<IssueStatus, string> = {
@@ -27,15 +31,21 @@ const statusColors: Record<IssueStatus, string> = {
   done: "bg-green-500/20 text-green-400 border-green-500/30",
   closed: "bg-gray-500/20 text-gray-400 border-gray-500/30",
 };
+const ISSUE_ATTACHMENT_LIMIT_BYTES = 20 * 1024 * 1024;
 
 export default function IssueDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [issue, setIssue] = useState<Issue | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [attachmentError, setAttachmentError] = useState("");
+  const canWrite = user?.role !== "readonly";
+  const canDelete = user?.role === "admin" || user?.role === "manager";
 
   const fetchIssue = async () => {
     const res = await fetch(`/api/issues/${params.id}`);
@@ -52,6 +62,7 @@ export default function IssueDetailPage() {
 
   const handleStatusChange = async (newStatus: string) => {
     if (!issue) return;
+    if (!canWrite) return;
     await fetch(`/api/issues/${issue.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -62,6 +73,7 @@ export default function IssueDetailPage() {
 
   const handleAddComment = async () => {
     if (!newComment.trim() || !issue) return;
+    if (!canWrite) return;
     setSubmitting(true);
     await fetch("/api/comments", {
       method: "POST",
@@ -73,8 +85,45 @@ export default function IssueDetailPage() {
     fetchIssue();
   };
 
+  const formatFileSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  const attachmentTotal = issue?.attachments?.reduce((total, attachment) => total + attachment.size, 0) || 0;
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || !issue || !canWrite) return;
+    const selectedFiles = Array.from(files);
+    if (selectedFiles.length === 0) return;
+    const selectedSize = selectedFiles.reduce((total, file) => total + file.size, 0);
+    if (attachmentTotal + selectedSize > ISSUE_ATTACHMENT_LIMIT_BYTES) {
+      setAttachmentError(t.issues.attachmentLimitError);
+      return;
+    }
+
+    setUploading(true);
+    setAttachmentError("");
+    try {
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetch(`/api/issues/${issue.id}/attachments`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => null);
+          throw new Error(error?.error || t.issues.uploadAttachmentError);
+        }
+      }
+      fetchIssue();
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : t.issues.uploadAttachmentError);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!issue) return;
+    if (!canDelete) return;
     if (!confirm("Delete this issue?")) return;
     await fetch(`/api/issues/${issue.id}`, { method: "DELETE" });
     router.push("/issues");
@@ -134,9 +183,11 @@ export default function IssueDetailPage() {
             </div>
             <h1 className="text-xl font-bold text-white">{issue.title}</h1>
           </div>
-          <button onClick={handleDelete} className="btn-ghost text-red-400 hover:text-red-300 px-2">
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {canDelete && (
+            <button onClick={handleDelete} className="btn-ghost text-red-400 hover:text-red-300 px-2">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {issue.description && (
@@ -158,15 +209,72 @@ export default function IssueDetailPage() {
                   <button
                     key={status}
                     onClick={() => handleStatusChange(status)}
+                    disabled={!canWrite}
                     className={`badge border cursor-pointer transition-all ${
                       issue.status === status
                         ? statusColors[status] + " ring-1 ring-offset-1 ring-offset-navy-900"
                         : "bg-navy-800 text-gray-400 border-navy-600 hover:border-gray-500"
-                    }`}
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
                   >
                     {t.statuses[status]}
                   </button>
                 )
+              )}
+            </div>
+          </div>
+
+          {/* Attachments */}
+          <div className="card p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-300">
+                  <Paperclip className="h-4 w-4 text-accent-400" />
+                  {t.issues.attachments} ({issue.attachments?.length || 0})
+                </h3>
+                <p className="mt-1 text-xs text-gray-500">
+                  {formatFileSize(attachmentTotal)} / 20 MB
+                </p>
+              </div>
+              {canWrite && (
+                <label className="btn-secondary cursor-pointer text-sm">
+                  <Upload className="h-3.5 w-3.5" />
+                  {uploading ? "Uploading..." : t.issues.uploadAttachment}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(e) => handleUpload(e.target.files)}
+                  />
+                </label>
+              )}
+            </div>
+            {attachmentError && (
+              <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {attachmentError}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {issue.attachments?.map((attachment: IssueAttachment) => (
+                <a
+                  key={attachment.id}
+                  href={attachment.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group overflow-hidden rounded-lg border border-navy-700 bg-navy-800 transition-colors hover:border-accent-500/50"
+                >
+                  <img src={attachment.url} alt={attachment.originalName} className="h-36 w-full object-cover" />
+                  <div className="p-3">
+                    <p className="truncate text-sm text-gray-200 group-hover:text-accent-300">{attachment.originalName}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatFileSize(attachment.size)} • {attachment.uploader?.name || "Unknown"}
+                    </p>
+                  </div>
+                </a>
+              ))}
+              {(!issue.attachments || issue.attachments.length === 0) && (
+                <p className="text-sm text-gray-500">No screenshots attached.</p>
               )}
             </div>
           </div>
@@ -188,10 +296,11 @@ export default function IssueDetailPage() {
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder={t.issues.writeComment}
                   className="input-field min-h-[80px] resize-y mb-2"
+                  disabled={!canWrite}
                 />
                 <button
                   onClick={handleAddComment}
-                  disabled={submitting || !newComment.trim()}
+                  disabled={submitting || !newComment.trim() || !canWrite}
                   className="btn-primary text-sm disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -222,6 +331,37 @@ export default function IssueDetailPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Activity */}
+          <div className="card p-5">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-300">
+              <History className="h-4 w-4 text-accent-400" />
+              {t.issues.activity}
+            </h3>
+            <div className="space-y-3">
+              {issue.activities?.map((activity: IssueActivity) => (
+                <div key={activity.id} className="rounded-lg bg-navy-800 p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-300">
+                    <span className="font-medium text-gray-100">{activity.actor?.name || "Unknown"}</span>
+                    <span>{activity.action}</span>
+                    {activity.field && <span className="text-accent-300">{activity.field}</span>}
+                  </div>
+                  {(activity.oldValue || activity.newValue) && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      {activity.oldValue ? `${activity.oldValue} → ` : ""}
+                      {activity.newValue}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-600">
+                    {new Date(activity.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+              {(!issue.activities || issue.activities.length === 0) && (
+                <p className="text-sm text-gray-500">No activity yet.</p>
+              )}
             </div>
           </div>
         </div>

@@ -76,6 +76,16 @@ const th: Translations = {
     selectProject: "เลือกโปรเจกต์",
     listView: "มุมมองรายการ",
     boardView: "มุมมองบอร์ด",
+    allAssignees: "ผู้รับผิดชอบทั้งหมด",
+    dateFrom: "จากวันที่",
+    dateTo: "ถึงวันที่",
+    attachments: "ไฟล์แนบ",
+    uploadAttachment: "อัปโหลดภาพหน้าจอ",
+    attachmentLimitHint: "รองรับเฉพาะรูปภาพ และไฟล์แนบรวมต่อปัญหาต้องไม่เกิน 20 MB",
+    attachmentLimitError: "ไฟล์แนบรวมของปัญหานี้ต้องไม่เกิน 20 MB",
+    uploadAttachmentError: "อัปโหลดไฟล์แนบไม่สำเร็จ",
+    createIssueError: "สร้างปัญหาไม่สำเร็จ",
+    activity: "ประวัติการเปลี่ยนแปลง",
   },
 
   // Issue Types
@@ -122,6 +132,7 @@ const th: Translations = {
     developer: "นักพัฒนา",
     tester: "ผู้ทดสอบ",
     manager: "ผู้จัดการ",
+    readonly: "ดูอย่างเดียว",
   },
 };
 

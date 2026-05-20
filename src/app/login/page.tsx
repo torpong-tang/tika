@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Bug, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Bug, Eye, EyeOff, Home, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,6 +44,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-navy-950 flex items-center justify-center p-4">
+      <a
+        href="https://2startup.cloud/"
+        aria-label="Return to 2Startup Cloud"
+        className="fixed right-5 top-5 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full bg-accent-500 text-white shadow-lg shadow-accent-500/25 transition-colors hover:bg-accent-600"
+      >
+        <Home className="h-5 w-5" />
+      </a>
+
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-accent-500/10 rounded-full blur-3xl" />
@@ -136,6 +144,9 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
+        <p className="mt-6 text-center text-xs text-gray-500">
+          © 2026 TPT Team • Version 1.0
+        </p>
       </div>
     </div>
   );

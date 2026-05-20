@@ -2,15 +2,18 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { useLanguage } from "@/context/LanguageContext";
-import { Issue, Project } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { Issue, Project, User } from "@/types";
 import IssueTable from "@/components/Issues/IssueTable";
 import CreateIssueModal from "@/components/Issues/CreateIssueModal";
 import { Plus, Filter } from "lucide-react";
 
 export default function IssuesPage() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -19,7 +22,12 @@ export default function IssuesPage() {
     priority: "",
     type: "",
     projectId: "",
+    assigneeId: "",
+    search: "",
+    dateFrom: "",
+    dateTo: "",
   });
+  const canCreate = user?.role !== "readonly";
 
   const fetchIssues = useCallback(async () => {
     setLoading(true);
@@ -28,6 +36,10 @@ export default function IssuesPage() {
     if (filters.priority) params.set("priority", filters.priority);
     if (filters.type) params.set("type", filters.type);
     if (filters.projectId) params.set("projectId", filters.projectId);
+    if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
+    if (filters.search) params.set("search", filters.search);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
 
     const res = await fetch(`/api/issues?${params.toString()}`);
     const data = await res.json();
@@ -38,14 +50,43 @@ export default function IssuesPage() {
   useEffect(() => {
     fetchIssues();
     fetch("/api/projects").then((r) => r.json()).then(setProjects);
+    fetch("/api/users").then((r) => r.json()).then(setUsers);
   }, [fetchIssues]);
 
-  const handleCreateIssue = async (data: unknown) => {
-    await fetch("/api/issues", {
+  const handleCreateIssue = async (data: {
+    title: string;
+    description: string;
+    type: string;
+    priority: string;
+    projectId: string;
+    assigneeId: string;
+    attachments?: File[];
+  }) => {
+    const { attachments = [], ...issueData } = data;
+    const response = await fetch("/api/issues", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(issueData),
     });
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.error || "Could not create issue");
+    }
+
+    const issue = await response.json();
+    for (const file of attachments) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadResponse = await fetch(`/api/issues/${issue.id}/attachments`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!uploadResponse.ok) {
+        const error = await uploadResponse.json().catch(() => null);
+        throw new Error(error?.error || "Could not upload attachment");
+      }
+    }
+
     setShowCreateModal(false);
     fetchIssues();
   };
@@ -60,16 +101,25 @@ export default function IssuesPage() {
             {issues.length} {t.issues.title.toLowerCase()}
           </p>
         </div>
-        <button onClick={() => setShowCreateModal(true)} className="btn-primary">
-          <Plus className="w-4 h-4" />
-          {t.issues.createIssue}
-        </button>
+        {canCreate && (
+          <button onClick={() => setShowCreateModal(true)} className="btn-primary">
+            <Plus className="w-4 h-4" />
+            {t.issues.createIssue}
+          </button>
+        )}
       </div>
 
       {/* Filters */}
       <div className="card p-4">
         <div className="flex items-center gap-3 flex-wrap">
           <Filter className="w-4 h-4 text-gray-400" />
+
+          <input
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            className="input-field w-auto min-w-[220px]"
+            placeholder={t.search}
+          />
 
           <select
             value={filters.status}
@@ -121,6 +171,35 @@ export default function IssuesPage() {
               </option>
             ))}
           </select>
+
+          <select
+            value={filters.assigneeId}
+            onChange={(e) => setFilters({ ...filters, assigneeId: e.target.value })}
+            className="select-field w-auto min-w-[170px]"
+          >
+            <option value="">{t.issues.allAssignees}</option>
+            <option value="unassigned">{t.issues.unassigned}</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            value={filters.dateFrom}
+            onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+            className="input-field w-auto"
+            aria-label={t.issues.dateFrom}
+          />
+          <input
+            type="date"
+            value={filters.dateTo}
+            onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+            className="input-field w-auto"
+            aria-label={t.issues.dateTo}
+          />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 # TIKA - Defect Tracker
 
-A modern defect tracking web application with Jira-like features, built with Next.js, Prisma, and MySQL.
+A modern defect tracking web application with Jira-like features, built with Next.js, Prisma, and SQLite.
 
 ## Features
 
@@ -15,7 +15,7 @@ A modern defect tracking web application with Jira-like features, built with Nex
 
 - **Frontend**: Next.js 14 (App Router), React, TailwindCSS, Lucide Icons
 - **Backend**: Next.js API Routes
-- **Database**: MySQL with Prisma ORM
+- **Database**: SQLite with Prisma ORM
 - **Language**: TypeScript
 
 ## Setup
@@ -26,9 +26,15 @@ npm install
 ```
 
 ### 2. Configure database
-Edit `.env` and set your MySQL connection:
+Edit `.env` and set your SQLite connection:
 ```
-DATABASE_URL="mysql://root:password@localhost:3306/tika_defect_tracker"
+DATABASE_URL="file:./dev.db"
+```
+
+For production, keep the database outside the app checkout:
+
+```
+DATABASE_URL="file:/var/lib/2startup/tika/tika.db"
 ```
 
 ### 3. Create database and push schema

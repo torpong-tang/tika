@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mockIssues } from "@/lib/mockData";
+import { getSession } from "@/lib/auth";
+import { canWriteIssues } from "@/lib/permissions";
+import { canAccessProject, getAccessibleProjectIds } from "@/lib/projectAccess";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,17 +12,37 @@ export async function GET(request: NextRequest) {
     const priority = searchParams.get("priority");
     const type = searchParams.get("type");
     const projectId = searchParams.get("projectId");
+    const assigneeId = searchParams.get("assigneeId");
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
     const search = searchParams.get("search");
+    const session = await getSession();
+    const accessibleProjectIds = await getAccessibleProjectIds(session);
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (type) where.type = type;
-    if (projectId) where.projectId = projectId;
+    if (projectId) {
+      if (accessibleProjectIds && !accessibleProjectIds.includes(projectId)) {
+        return NextResponse.json([]);
+      }
+      where.projectId = projectId;
+    } else if (accessibleProjectIds) {
+      where.projectId = { in: accessibleProjectIds };
+    }
+    if (assigneeId) where.assigneeId = assigneeId === "unassigned" ? null : assigneeId;
+    if (dateFrom || dateTo) {
+      where.createdAt = {
+        ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00.000Z`) } : {}),
+        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+      };
+    }
     if (search) {
       where.OR = [
         { title: { contains: search } },
         { issueKey: { contains: search } },
+        { description: { contains: search } },
       ];
     }
 
@@ -30,7 +53,7 @@ export async function GET(request: NextRequest) {
         project: true,
         assignee: true,
         reporter: true,
-        _count: { select: { comments: true } },
+        _count: { select: { comments: true, attachments: true } },
       },
     });
 
@@ -54,21 +77,22 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { title, description, type, priority, projectId, assigneeId } = body;
+    const session = await getSession();
+    if (!canWriteIssues(session)) {
+      return NextResponse.json({ error: "Readonly users cannot create issues" }, { status: 403 });
+    }
 
     // Get the project to generate issue key
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
+    if (!await canAccessProject(session, projectId)) {
+      return NextResponse.json({ error: "You do not have access to this project" }, { status: 403 });
+    }
 
     const issueCount = await prisma.issue.count({ where: { projectId } });
     const issueKey = `${project.key}-${issueCount + 1}`;
-
-    // Get the first user as default reporter
-    const defaultUser = await prisma.user.findFirst();
-    if (!defaultUser) {
-      return NextResponse.json({ error: "No users found" }, { status: 400 });
-    }
 
     const issue = await prisma.issue.create({
       data: {
@@ -80,12 +104,21 @@ export async function POST(request: NextRequest) {
         status: "open",
         projectId,
         assigneeId: assigneeId || null,
-        reporterId: defaultUser.id,
+        reporterId: session!.id,
+        activities: {
+          create: {
+            action: "created",
+            field: "issue",
+            newValue: title,
+            actorId: session!.id,
+          },
+        },
       },
       include: {
         project: true,
         assignee: true,
         reporter: true,
+        activities: { include: { actor: true }, orderBy: { createdAt: "desc" } },
       },
     });
 

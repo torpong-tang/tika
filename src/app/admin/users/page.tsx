@@ -25,27 +25,36 @@ interface ManagedUser {
   isActive: boolean;
   avatar: string | null;
   createdAt: string;
+  projectMemberships?: { id: string; projectId: string; project?: { id: string; name: string; key: string } }[];
   _count?: { assignedIssues: number; reportedIssues: number; comments: number };
 }
 
-const roles = ["admin", "developer", "tester", "manager"];
+interface AdminProject {
+  id: string;
+  name: string;
+  key: string;
+}
+
+const roles = ["admin", "manager", "developer", "tester", "readonly"];
 
 const roleBadge: Record<string, string> = {
   admin: "bg-red-500/20 text-red-400 border-red-500/30",
   developer: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   tester: "bg-green-500/20 text-green-400 border-green-500/30",
   manager: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  readonly: "bg-gray-500/20 text-gray-400 border-gray-500/30",
 };
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [projects, setProjects] = useState<AdminProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState<ManagedUser | null>(null);
   const [showPw, setShowPw] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "developer" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "developer", projectIds: [] as string[] });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -65,20 +74,35 @@ export default function AdminUsersPage() {
     setLoading(false);
   };
 
+  const fetchProjects = async () => {
+    const res = await fetch("/api/projects");
+    if (res.ok) {
+      const data = await res.json();
+      setProjects(data);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchProjects();
   }, []);
 
   const openCreate = () => {
     setEditUser(null);
-    setForm({ name: "", email: "", password: "", role: "developer" });
+    setForm({ name: "", email: "", password: "", role: "developer", projectIds: [] });
     setError("");
     setShowModal(true);
   };
 
   const openEdit = (u: ManagedUser) => {
     setEditUser(u);
-    setForm({ name: u.name, email: u.email, password: "", role: u.role });
+    setForm({
+      name: u.name,
+      email: u.email,
+      password: "",
+      role: u.role,
+      projectIds: u.projectMemberships?.map((membership) => membership.projectId) || [],
+    });
     setError("");
     setShowModal(true);
   };
@@ -91,7 +115,7 @@ export default function AdminUsersPage() {
     try {
       if (editUser) {
         // Update
-        const body: Record<string, string> = { name: form.name, email: form.email, role: form.role };
+        const body: Record<string, unknown> = { name: form.name, email: form.email, role: form.role, projectIds: form.projectIds };
         if (form.password) body.password = form.password;
         const res = await fetch(`/api/admin/users/${editUser.id}`, {
           method: "PUT",
@@ -174,6 +198,7 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Email</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Role</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Status</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Projects</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Issues</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Created</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase text-right">Actions</th>
@@ -210,6 +235,21 @@ export default function AdminUsersPage() {
                       <span className="inline-flex items-center gap-1 text-xs text-red-400">
                         <UserX className="w-3.5 h-3.5" /> Disabled
                       </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.role === "admin" ? (
+                      <span className="text-xs text-accent-300">All projects</span>
+                    ) : u.projectMemberships && u.projectMemberships.length > 0 ? (
+                      <div className="flex max-w-[240px] flex-wrap gap-1">
+                        {u.projectMemberships.map((membership) => (
+                          <span key={membership.id} className="rounded-full border border-navy-600 bg-navy-800 px-2 py-0.5 text-xs text-gray-300">
+                            {membership.project?.key || membership.projectId}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-red-300">No access</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-400">
@@ -303,6 +343,40 @@ export default function AdminUsersPage() {
                     <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Project Access</label>
+                <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-navy-700 bg-navy-800/50 p-3">
+                  {projects.length === 0 ? (
+                    <p className="text-sm text-gray-500">No projects available</p>
+                  ) : (
+                    projects.map((project) => {
+                      const checked = form.projectIds.includes(project.id);
+                      return (
+                        <label key={project.id} className="flex items-center gap-3 text-sm text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setForm({
+                                ...form,
+                                projectIds: e.target.checked
+                                  ? [...form.projectIds, project.id]
+                                  : form.projectIds.filter((id) => id !== project.id),
+                              });
+                            }}
+                            className="h-4 w-4 rounded border-navy-600 bg-navy-900 text-accent-500"
+                          />
+                          <span>{project.name}</span>
+                          <span className="text-xs text-gray-500">({project.key})</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Admin can see every project. Other roles only see selected projects.
+                </p>
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>

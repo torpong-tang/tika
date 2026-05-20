@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import { Issue, IssueStatus } from "@/types";
 import {
   Bug,
@@ -51,6 +52,7 @@ const priorityIcons: Record<string, React.ReactNode> = {
 
 export default function BoardPage() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,6 +68,7 @@ export default function BoardPage() {
 
   const handleDrop = async (issueId: string, newStatus: IssueStatus) => {
     const issue = issues.find((i) => i.id === issueId);
+    if (user?.role === "readonly") return;
     if (!issue || issue.status === newStatus) return;
 
     setIssues((prev) =>
@@ -127,11 +130,14 @@ export default function BoardPage() {
                   <Link
                     key={issue.id}
                     href={`/issues/${issue.id}`}
-                    draggable
+                    draggable={user?.role !== "readonly"}
                     onDragStart={(e) => {
+                      if (user?.role === "readonly") return;
                       e.dataTransfer.setData("issueId", issue.id);
                     }}
-                    className="block bg-navy-800 border border-navy-700 rounded-lg p-3 hover:border-accent-500/40 transition-all cursor-grab active:cursor-grabbing group"
+                    className={`block bg-navy-800 border border-navy-700 rounded-lg p-3 hover:border-accent-500/40 transition-all group ${
+                      user?.role === "readonly" ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
+                    }`}
                   >
                     <div className="flex items-center gap-2 mb-2">
                       {typeIcons[issue.type]}

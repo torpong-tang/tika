@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Prompt } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthenticatedLayout from "@/components/Layout/AuthenticatedLayout";
 import ApiBasePathPatch from "@/components/ApiBasePathPatch";
 
-const inter = Inter({ subsets: ["latin"] });
+const prompt = Prompt({
+  subsets: ["latin", "thai"],
+  weight: ["300", "400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "TIKA - Defect Tracker",
@@ -20,7 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={prompt.className}>
         <ApiBasePathPatch />
         <AuthProvider>
           <LanguageProvider>

@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from "react";
 import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import { Project } from "@/types";
 import { Plus, FolderKanban, X } from "lucide-react";
 
 export default function ProjectsPage() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -53,10 +55,12 @@ export default function ProjectsPage() {
             {projects.length} {t.projects.title.toLowerCase()}
           </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary">
-          <Plus className="w-4 h-4" />
-          {t.projects.createProject}
-        </button>
+        {user?.role === "admin" && (
+          <button onClick={() => setShowModal(true)} className="btn-primary">
+            <Plus className="w-4 h-4" />
+            {t.projects.createProject}
+          </button>
+        )}
       </div>
 
       {/* Projects Grid */}

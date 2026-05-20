@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mockIssues } from "@/lib/mockData";
+import { getSession } from "@/lib/auth";
+import { canDeleteIssues, canWriteIssues } from "@/lib/permissions";
+import { canAccessIssue, canAccessProject } from "@/lib/projectAccess";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getSession();
     const issue = await prisma.issue.findUnique({
       where: { id: params.id },
       include: {
@@ -17,10 +21,21 @@ export async function GET(
           orderBy: { createdAt: "desc" },
           include: { author: true },
         },
+        attachments: {
+          orderBy: { createdAt: "desc" },
+          include: { uploader: true },
+        },
+        activities: {
+          orderBy: { createdAt: "desc" },
+          include: { actor: true },
+        },
       },
     });
 
     if (!issue) {
+      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
+    if (!await canAccessProject(session, issue.projectId)) {
       return NextResponse.json({ error: "Issue not found" }, { status: 404 });
     }
 
@@ -38,6 +53,32 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
+    const session = await getSession();
+    if (!canWriteIssues(session)) {
+      return NextResponse.json({ error: "Readonly users cannot update issues" }, { status: 403 });
+    }
+    if (!await canAccessIssue(session, params.id)) {
+      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
+
+    const current = await prisma.issue.findUnique({ where: { id: params.id } });
+    if (!current) {
+      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
+    if (body.projectId && !await canAccessProject(session, body.projectId)) {
+      return NextResponse.json({ error: "You do not have access to this project" }, { status: 403 });
+    }
+
+    const trackedFields = ["status", "priority", "assigneeId", "projectId"] as const;
+    const activityCreates = trackedFields
+      .filter((field) => body[field] !== undefined && String(current[field] ?? "") !== String(body[field] ?? ""))
+      .map((field) => ({
+        action: "updated",
+        field,
+        oldValue: String(current[field] ?? "Unassigned"),
+        newValue: String(body[field] ?? "Unassigned"),
+        actorId: session!.id,
+      }));
 
     const issue = await prisma.issue.update({
       where: { id: params.id },
@@ -49,11 +90,13 @@ export async function PUT(
         priority: body.priority,
         assigneeId: body.assigneeId || null,
         projectId: body.projectId,
+        ...(activityCreates.length > 0 ? { activities: { create: activityCreates } } : {}),
       },
       include: {
         project: true,
         assignee: true,
         reporter: true,
+        activities: { include: { actor: true }, orderBy: { createdAt: "desc" } },
       },
     });
 
@@ -70,6 +113,13 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getSession();
+    if (!canDeleteIssues(session)) {
+      return NextResponse.json({ error: "Only admins and managers can delete issues" }, { status: 403 });
+    }
+    if (!await canAccessIssue(session, params.id)) {
+      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
     await prisma.issue.delete({ where: { id: params.id } });
     return NextResponse.json({ message: "Issue deleted" });
   } catch {

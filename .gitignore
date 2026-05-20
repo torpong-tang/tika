@@ -9,3 +9,8 @@ playwright-report/
 public/avatars/*.jpg
 public/avatars/*.png
 public/avatars/*.gif
+public/uploads/
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm

@@ -77,6 +77,19 @@ async function main() {
     create: { name: "Disabled User", email: "disabled@tika.dev", password: defaultPassword, role: "developer", isActive: false },
   });
 
+  // ── Read-only Users (view only) ──
+  await prisma.user.upsert({
+    where: { email: "readonly@tika.dev" },
+    update: { isActive: true, role: "readonly" },
+    create: {
+      name: "Readonly Viewer",
+      email: "readonly@tika.dev",
+      password: defaultPassword,
+      role: "readonly",
+      isActive: true,
+    },
+  });
+
   // References for issues
   const user1 = await prisma.user.findUnique({ where: { email: "torpong.t@gmail.com" } });
   const user2 = await prisma.user.findUnique({ where: { email: "john@tika.dev" } });
@@ -114,6 +127,37 @@ async function main() {
       description: "Backend API services",
     },
   });
+
+  const projectAccess: Record<string, string[]> = {
+    "john@tika.dev": [project1.id, project3.id],
+    "somchai.dev@tika.dev": [project1.id],
+    "emily.dev@tika.dev": [project2.id],
+    "nattapong.dev@tika.dev": [project3.id],
+    "mike@tika.dev": [project1.id, project2.id, project3.id],
+    "sara@tika.dev": [project1.id, project2.id, project3.id],
+    "ploy.test@tika.dev": [project1.id],
+    "james.test@tika.dev": [project2.id],
+    "naree.test@tika.dev": [project3.id],
+    "lisa.test@tika.dev": [project1.id, project2.id],
+    "pravit.mgr@tika.dev": [project1.id, project2.id, project3.id],
+    "susan.mgr@tika.dev": [project1.id],
+    "wichai.mgr@tika.dev": [project2.id],
+    "karen.mgr@tika.dev": [project3.id],
+    "arthit.mgr@tika.dev": [project1.id, project3.id],
+    "readonly@tika.dev": [project1.id],
+  };
+
+  for (const [email, projectIds] of Object.entries(projectAccess)) {
+    const member = await prisma.user.findUnique({ where: { email } });
+    if (!member) continue;
+    for (const projectId of projectIds) {
+      await prisma.projectMember.upsert({
+        where: { projectId_userId: { projectId, userId: member.id } },
+        update: {},
+        create: { userId: member.id, projectId },
+      });
+    }
+  }
 
   // Create Issues
   const issues = [
@@ -252,10 +296,22 @@ async function main() {
   ];
 
   for (const issue of issues) {
-    await prisma.issue.upsert({
+    const savedIssue = await prisma.issue.upsert({
       where: { issueKey: issue.issueKey },
       update: {},
       create: issue,
+    });
+    await prisma.issueActivity.upsert({
+      where: { id: `seed-${savedIssue.issueKey}` },
+      update: {},
+      create: {
+        id: `seed-${savedIssue.issueKey}`,
+        action: "created",
+        field: "issue",
+        newValue: savedIssue.title,
+        issueId: savedIssue.id,
+        actorId: savedIssue.reporterId,
+      },
     });
   }
 

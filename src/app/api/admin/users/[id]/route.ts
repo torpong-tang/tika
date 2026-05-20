@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, hashPassword } from "@/lib/auth";
+import { canManageUsers, isRole } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await getSession();
   if (!session) return { error: "Not authenticated", status: 401 };
-  if (session.role !== "admin") return { error: "Forbidden: Admin only", status: 403 };
+  if (!canManageUsers(session)) return { error: "Forbidden: Admin only", status: 403 };
   return { session };
 }
 
@@ -22,7 +23,10 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { name, email, role, isActive, password } = body;
+    const { name, email, role, isActive, password, projectIds } = body;
+    if (role !== undefined && !isRole(role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    }
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name;
@@ -31,10 +35,32 @@ export async function PUT(
     if (isActive !== undefined) updateData.isActive = isActive;
     if (password) updateData.password = await hashPassword(password);
 
-    const user = await prisma.user.update({
-      where: { id: params.id },
-      data: updateData,
-      select: { id: true, name: true, email: true, role: true, isActive: true, avatar: true, createdAt: true, updatedAt: true },
+    const user = await prisma.$transaction(async (tx) => {
+      if (Array.isArray(projectIds)) {
+        await tx.projectMember.deleteMany({ where: { userId: params.id } });
+        await tx.projectMember.createMany({
+          data: Array.from(new Set(projectIds as string[])).map((projectId) => ({ userId: params.id, projectId })),
+        });
+      }
+
+      return tx.user.update({
+        where: { id: params.id },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          avatar: true,
+          createdAt: true,
+          updatedAt: true,
+          projectMemberships: {
+            include: { project: { select: { id: true, name: true, key: true } } },
+            orderBy: { project: { name: "asc" } },
+          },
+        },
+      });
     });
 
     return NextResponse.json(user);

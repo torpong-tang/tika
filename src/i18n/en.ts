@@ -74,6 +74,16 @@ const en = {
     selectProject: "Select Project",
     listView: "List View",
     boardView: "Board View",
+    allAssignees: "All Assignees",
+    dateFrom: "From",
+    dateTo: "To",
+    attachments: "Attachments",
+    uploadAttachment: "Upload Screenshot",
+    attachmentLimitHint: "Images only. Total attachments per issue cannot exceed 20 MB.",
+    attachmentLimitError: "Total attachments for this issue cannot exceed 20 MB.",
+    uploadAttachmentError: "Could not upload attachment.",
+    createIssueError: "Could not create issue.",
+    activity: "Activity",
   },
 
   // Issue Types
@@ -120,6 +130,7 @@ const en = {
     developer: "Developer",
     tester: "Tester",
     manager: "Manager",
+    readonly: "Read only",
   },
 };
 

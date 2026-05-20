@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, hashPassword } from "@/lib/auth";
+import { canManageUsers, isRole } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await getSession();
   if (!session) return { error: "Not authenticated", status: 401 };
-  if (session.role !== "admin") return { error: "Forbidden: Admin only", status: 403 };
+  if (!canManageUsers(session)) return { error: "Forbidden: Admin only", status: 403 };
   return { session };
 }
 
@@ -29,6 +30,10 @@ export async function GET() {
         avatar: true,
         createdAt: true,
         updatedAt: true,
+        projectMemberships: {
+          include: { project: { select: { id: true, name: true, key: true } } },
+          orderBy: { project: { name: "asc" } },
+        },
         _count: { select: { assignedIssues: true, reportedIssues: true, comments: true } },
       },
     });
@@ -47,10 +52,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, email, password, role } = body;
+    const { name, email, password, role, projectIds } = body;
+    const uniqueProjectIds = Array.isArray(projectIds) ? Array.from(new Set(projectIds as string[])) : [];
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Name, email, and password are required" }, { status: 400 });
+    }
+    if (role && !isRole(role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -67,6 +76,9 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         role: role || "developer",
         isActive: true,
+        projectMemberships: uniqueProjectIds.length > 0
+          ? { create: uniqueProjectIds.map((projectId) => ({ projectId })) }
+          : undefined,
       },
       select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
     });

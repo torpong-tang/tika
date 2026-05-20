@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ArrowDown,
   MessageSquare,
+  Paperclip,
 } from "lucide-react";
 
 const typeIcons: Record<IssueType, React.ReactNode> = {
@@ -130,6 +131,12 @@ export default function IssueTable({ issues }: IssueTableProps) {
                     <div className="flex items-center gap-1 text-gray-500">
                       <MessageSquare className="w-3.5 h-3.5" />
                       <span className="text-xs">{issue._count.comments}</span>
+                    </div>
+                  )}
+                  {issue._count && !!issue._count.attachments && issue._count.attachments > 0 && (
+                    <div className="mt-1 flex items-center gap-1 text-gray-500">
+                      <Paperclip className="w-3.5 h-3.5" />
+                      <span className="text-xs">{issue._count.attachments}</span>
                     </div>
                   )}
                 </td>
